@@ -1,7 +1,26 @@
+// SCB: @global-cc(gcc)
+// SCB: @ld(gcc)
+// SCB: @cflags(-pedantic-errors)
+// SCB: @output(scb)
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+
+#ifdef __linux__
+	#define DEFAULT_CC "gcc"
+	#define DEFAULT_LD "gcc"
+#elif defined(_WIN32)
+	#define DEFAULT_CC "gcc"
+	#define DEFAULT_LD "gcc"
+
+#elif defined(__APPLE__)
+	#define DEFAULT_CC "gcc"
+	#define DEFAULT_LD "gcc"
+#else
+	#error "Unsupported OS"
+#endif
 
 typedef struct SCB_FileConfig
 {
@@ -18,6 +37,7 @@ typedef struct SCB_GlobalConfig
 	SCB_FileConfig	**sources;
 	int sourceCount;
 	char *cc;
+	char *ld;
 	char *cflags;
 	char *ldflags;
 } SCB_GlobalConfig;
@@ -217,6 +237,11 @@ int SCB_InitGlobalConfig(const char *mainFile)
 			{
 				GlobalConfig.cc = strdup(value);
 			}
+			else if (strcmp(directive, "ld") == 0)
+			{
+				GlobalConfig.ld = strdup(value);
+			}
+
 			else if (strcmp(directive, "global-cflags") == 0)
 			{
 				GlobalConfig.cflags = strdup(value);
@@ -327,8 +352,7 @@ int SCB_LinkExecutable()
 	}
 
 	char command[2048] = {0};
-	snprintf(command, sizeof(command), "%s ", GlobalConfig.sources[0]->cc);
-
+	snprintf(command, sizeof(command), "%s ", GlobalConfig.ld);
 	for (int i = 0; i < GlobalConfig.sourceCount; ++i)
 	{
 		strcat(command, GlobalConfig.sources[i]->filepath);
