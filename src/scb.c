@@ -1,4 +1,5 @@
 // SCB: @output(scb)
+#include <glob.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,14 +19,16 @@
 #error "Unsupported OS"
 #endif
 
-typedef struct SCB_FileConfig {
+typedef struct SCB_FileConfig
+{
 	char *filepath;
 	char *cc;
 	char *cflags;
 	char *ldflags;
 } SCB_FileConfig;
 
-typedef struct SCB_GlobalConfig {
+typedef struct SCB_GlobalConfig
+{
 	char *output;
 	char **sourcePaths;
 	SCB_FileConfig **sources;
@@ -37,7 +40,8 @@ typedef struct SCB_GlobalConfig {
 	int dryRun;
 } SCB_GlobalConfig;
 
-typedef enum SCB_Platform {
+typedef enum SCB_Platform
+{
 	PLATFORM_LINUX,
 	PLATFORM_MACOS,
 	PLATFORM_WINDOWS,
@@ -46,7 +50,8 @@ typedef enum SCB_Platform {
 
 SCB_GlobalConfig GlobalConfig = {0};
 
-SCB_Platform SCB_GetCurrentPlatform(void) {
+SCB_Platform SCB_GetCurrentPlatform(void)
+{
 #ifdef __linux__
 	return PLATFORM_LINUX;
 #elif defined(_WIN32)
@@ -58,7 +63,8 @@ SCB_Platform SCB_GetCurrentPlatform(void) {
 #endif
 }
 
-int SCB_PlatformMatches(SCB_Platform current, const char *target) {
+int SCB_PlatformMatches(SCB_Platform current, const char *target)
+{
 	if (!target || strcmp(target, "default") == 0) return 1;
 	if (strcmp(target, "linux") == 0)   return current == PLATFORM_LINUX;
 	if (strcmp(target, "macos") == 0)   return current == PLATFORM_MACOS;
@@ -100,17 +106,29 @@ int SCB_NeedsRebuild(const char *source, const char *object, const char *outputE
 	return 0;
 }
 
-char *StrDupTrim(const char *start, size_t len) {
-	while (len && isspace(*start)) { ++start; --len; }
-	while (len && isspace(start[len - 1])) { --len; }
+char *StrDupTrim(const char *start, size_t len)
+{
+	while (len && isspace(*start))
+	{
+		++start;
+		--len;
+	}
+	while (len && isspace(start[len - 1]))
+	{
+		--len;
+	}
 	char *s = malloc(len + 1);
-	if (!s) return NULL;
+	if (!s)
+	{
+		return NULL;
+	}
 	memcpy(s, start, len);
 	s[len] = '\0';
 	return s;
 }
 
-void SCB_ParseDirective(char *line, char **directiveOut, char **valueOut, char **platformOut) {
+void SCB_ParseDirective(char *line, char **directiveOut, char **valueOut, char **platformOut)
+{
 	char *at = strchr(line, '@');
 	if (!at) return;
 
@@ -139,7 +157,8 @@ void SCB_ParseDirective(char *line, char **directiveOut, char **valueOut, char *
 	free(content);
 }
 
-SCB_FileConfig *SCB_GetFileConfig(char *filepath) {
+SCB_FileConfig *SCB_GetFileConfig(char *filepath)
+{
 	FILE *file = fopen(filepath, "r");
 	if (!file) {
 		fprintf(stderr, "[ERROR]: failed to open %s\n", filepath);
@@ -165,10 +184,14 @@ SCB_FileConfig *SCB_GetFileConfig(char *filepath) {
 		{
 			continue;
 		}
-		if (SCB_PlatformMatches(currentPlatform, platform)) {
-			if (strcmp(directive, "cc") == 0)         config->cc = strdup(value);
-			else if (strcmp(directive, "cflags") == 0) config->cflags = strdup(value);
-			else if (strcmp(directive, "ldflags") == 0) config->ldflags = strdup(value);
+		if (SCB_PlatformMatches(currentPlatform, platform))
+		{
+			if (strcmp(directive, "cc") == 0)
+				config->cc = strdup(value);
+			else if (strcmp(directive, "cflags") == 0)
+				config->cflags = strdup(value);
+			else if (strcmp(directive, "ldflags") == 0)
+				config->ldflags = strdup(value);
 		}
 
 		free(directive); free(value); free(platform);
@@ -177,28 +200,55 @@ SCB_FileConfig *SCB_GetFileConfig(char *filepath) {
 	return config;
 }
 
-int SCB_InitGlobalConfig(const char *mainFile) {
+
+void SCB_AddSourcePath(const char *path)
+{
+	GlobalConfig.sourcePaths = realloc(GlobalConfig.sourcePaths, sizeof(char *) * (GlobalConfig.sourceCount + 1));
+	GlobalConfig.sourcePaths[GlobalConfig.sourceCount++] = strdup(path);
+}
+
+void SCB_ExpandWildcardAndAdd(const char *pattern)
+{
+	glob_t results;
+	memset(&results, 0, sizeof(results));
+
+	if (glob(pattern, 0, NULL, &results) == 0)
+	{
+		for (size_t i = 0; i < results.gl_pathc; ++i)
+		{
+			SCB_AddSourcePath(results.gl_pathv[i]);
+		}
+	}
+	else
+	{
+		fprintf(stderr, "[WARNING] No match for pattern: %s\n", pattern);
+	}
+
+	globfree(&results);
+}
+
+int SCB_InitGlobalConfig(const char *mainFile)
+{
 	FILE *file = fopen(mainFile, "r");
-	if (!file) {
+	if (!file)
+	{
 		fprintf(stderr, "[ERROR]: Failed to open %s\n", mainFile);
 		exit(1);
 	}
 
-	GlobalConfig.sourcePaths = realloc(GlobalConfig.sourcePaths, sizeof(char *) * (GlobalConfig.sourceCount + 1));
-	GlobalConfig.sourcePaths[GlobalConfig.sourceCount++] = strdup(mainFile);
+	SCB_AddSourcePath(mainFile);
 	SCB_Platform current = SCB_GetCurrentPlatform();
 
 	char line[1024];
-	while (fgets(line, sizeof(line), file)) {
+	while (fgets(line, sizeof(line), file))
+	{
 		if (!strstr(line, "// SCB:")) continue;
 
 		char *directive = NULL, *value = NULL, *platform = NULL;
 		SCB_ParseDirective(line, &directive, &value, &platform);
 
-		if (!directive)
-		{
-			continue;
-		}
+		if (!directive) continue;
+
 		if (SCB_PlatformMatches(current, platform))
 		{
 			if (strcmp(directive, "output") == 0)
@@ -210,8 +260,14 @@ int SCB_InitGlobalConfig(const char *mainFile) {
 				char *token = strtok(value, " ");
 				while (token)
 				{
-					GlobalConfig.sourcePaths = realloc(GlobalConfig.sourcePaths, sizeof(char *) * (GlobalConfig.sourceCount + 1));
-					GlobalConfig.sourcePaths[GlobalConfig.sourceCount++] = strdup(token);
+					if (strchr(token, '*') || strchr(token, '?'))
+					{
+						SCB_ExpandWildcardAndAdd(token);
+					}
+					else
+					{
+						SCB_AddSourcePath(token);
+					}
 					token = strtok(NULL, " ");
 				}
 			}
@@ -231,9 +287,19 @@ int SCB_InitGlobalConfig(const char *mainFile) {
 			{
 				GlobalConfig.ldflags = strdup(value);
 			}
+			else
+			{
+				if (strcmp(directive, "cc") == 0)
+				{
+					continue;
+				}
+				fprintf(stderr, "[WARNING] Unknown directive: %s\n", directive);
+			}
 		}
 
-		free(directive); free(value); free(platform);
+		free(directive);
+		free(value);
+		free(platform);
 	}
 
 	if (!GlobalConfig.cc) GlobalConfig.cc = strdup(DEFAULT_CC);
@@ -243,7 +309,9 @@ int SCB_InitGlobalConfig(const char *mainFile) {
 }
 
 
-int SCB_ExecuteFileConfig(SCB_FileConfig *cfg) {
+
+int SCB_ExecuteFileConfig(SCB_FileConfig *cfg)
+{
 	if (!cfg || !cfg->filepath) return -1;
 	const char *cc = cfg->cc ? cfg->cc : GlobalConfig.cc;
 	if (!cc) return -1;
@@ -340,8 +408,10 @@ int SCB_Load(const char *mainFile)
 	return 0;
 }
 
-int main(int argc, char **argv) {
-	if (argc < 2) {
+int main(int argc, char **argv)
+{
+	if (argc < 2)
+	{
 		fprintf(stderr, "Usage: %s <main.c>\n", argv[0]);
 		return 1;
 	}
