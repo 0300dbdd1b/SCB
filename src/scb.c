@@ -1,3 +1,4 @@
+
 // SCB: @output(scb)
 #include <glob.h>
 #include <stdlib.h>
@@ -293,6 +294,15 @@ int SCB_InitGlobalConfig(const char *mainFile)
 				{
 					continue;
 				}
+				else if (strcmp(directive, "cflags") == 0)
+				{
+					continue;
+				}
+				else if (strcmp(directive, "ldflags") == 0)
+				{
+					continue;
+				}
+
 				fprintf(stderr, "[WARNING] Unknown directive: %s\n", directive);
 			}
 		}
