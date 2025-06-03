@@ -368,6 +368,11 @@ int SCB_LinkExecutable(void)
 		fprintf(stderr, "[ERROR]: no output specified\n");
 		return -1;
 	}
+	if (!GlobalConfig.ld)
+	{
+		fprintf(stderr, "[ERROR]: no linker specified\n");
+		return -1;
+	}
 
 	char cmd[2048] = {0};
 	snprintf(cmd, sizeof(cmd), "%s ", GlobalConfig.ld);
@@ -394,7 +399,11 @@ int SCB_LinkExecutable(void)
 			strcat(cmd, cfg->ldflags);
 		}
 	}
-
+	strcat(cmd, " ");
+	if (GlobalConfig.ldflags)
+	{
+		strcat(cmd, GlobalConfig.ldflags);
+	}
 	printf("[SCB] Linking: %s\n", cmd);
 	return system(cmd);
 }
